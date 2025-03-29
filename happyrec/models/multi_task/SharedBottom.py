@@ -6,8 +6,8 @@ Author:
 
 import tensorflow as tf
 from tensorflow.keras import Model
-from tensorflow.keras.layers import Embedding, Dropout, Flatten, Dense, Input
-from happyrec.layers.core import MLP, PredictionLayer
+from tensorflow.keras.layers import Dropout, Flatten, Dense, Input
+from happyrec.layers.core import MLP, PredictionLayer, EmbeddingLayer
 
 class SharedBottom(Model):
     def __init__(self, features, bottem_mlp_hidden_units=(256, 128), tower_mlp_hidden_units=(64,), 
@@ -34,7 +34,7 @@ class SharedBottom(Model):
         outputs = [predict_layer(tower(x)) for tower, predict_layer in zip(self.towers, self.predict_layers)]
         return tf.concat(outputs, axis=-1)
     
-    
+
 
 
 

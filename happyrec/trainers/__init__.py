@@ -1,0 +1,1 @@
+from happyrec.trainers.mtl_trainer import MTLTrainer

@@ -28,8 +28,6 @@ class MLP(Layer):
         x = self.dropout(x)
         return x
 
-# class EmbeddingLayer(Model):
-#     def __init__(self, features):
         
 class PredictionLayer(Layer):
     def __init__(self, task_type="classification"):
@@ -43,6 +41,47 @@ class PredictionLayer(Layer):
             x = tf.sigmoid(x)
         return x
     
+class SumPooling(Layer):
+    def __init__(self):
+        super(SumPooling, self).__init__()
+    def call(self, x, mask=None):
+        if mask is None:
+            return tf.reduce_sum(x, axis=1)
+        else:
+            return tf.squeeze(tf.linalg.matmul(mask, x), axis=1)
+
+class AveragePooling(Layer):
+    def __init__(self):
+        super(AveragePooling, self).__init__()
+    def call(self, x, mask=None):
+        if mask is None:
+            return tf.reduce_mean(x, axis=1)
+        else:
+            sum_pooling_matrix = tf.squeeze(tf.linalg.matmul(mask, x), axis=1)
+            non_padding_length = tf.reduce_sum(mask, axis=-1)
+            return sum_pooling_matrix / (tf.cast(non_padding_length, tf.float32) + 1e-16)
+
+class InputMask(Layer):
+    def __init__(self):
+        super(InputMask, self).__init__()
+
+    def call(self, x, features):
+        mask = []
+        if not isinstance(features, list):
+            features = [features]
+        
+        for fea in features:
+            if isinstance(fea, SparseFeature) or isinstance(fea, SequenceFeature):
+                if fea.padding_idx is not None:
+                    fea_mask = x[fea.name].long() != fea.padding_idx
+                else:
+                    fea_mask = x[fea.name].long() != -1
+                mask.append(tf.cast(tf.expand_dims(fea_mask, axis=1), tf.float32))
+            else:
+                raise ValueError("Only SparseFeature or SequenceFeature support to get mask.")
+        return tf.concat(mask, axis=1)
+        
+
 class EmbeddingLayer(Layer):
     def __init__(self, features):
         super(EmbeddingLayer, self).__init__()
@@ -62,14 +101,51 @@ class EmbeddingLayer(Layer):
 
     def call(self, x, features, squeeze_dim=False):
         sparse_emb, dense_values = [], []
+        sparse_exists, dense_exists = False, False
 
         for fea in features:
             if isinstance(fea, SparseFeature):
                 if fea.shared_with == None:
-                    sparse_emb.append(self.embed_dict[fea.name](x[fea.name].long()).unsqueeze(1))
+                    sparse_emb.append(tf.expand_dims(self.embed_dict[fea.name](x[fea.name].long()), axis=1))
                 else:
-                    sparse_emb.append(self.embed_dict[fea.shared_with](x[fea.name].long()).unsqueeze(1))
-                
-    
+                    sparse_emb.append(tf.expand_dims(self.embed_dict[fea.shared_with](x[fea.name].long()), axis=1))
+            elif isinstance(fea, SequenceFeature):
+                if fea.pooling == "sum":
+                    pooling_layer = SumPooling()
+                elif fea.pooling == "mean":
+                    pooling_layer = AveragePooling()
+                else:
+                    raise ValueError("Sequence pooling method supports only {'sum', 'mean'}, but got {}.".format(fea.pooling))
+                fea_mask = InputMask()(x, fea)
+                if fea.shared_with == None:
+                    sparse_emb.append(tf.expand_dims(pooling_layer(self.embed_dict[fea.name](x[fea.name].long(), fea_mask)), axis=1))
+                else:
+                    sparse_emb.append(tf.expand_dims(pooling_layer(self.embed_dict[fea.shared_with](x[fea.name].long()), fea_mask), axis=1))
+            else:
+                dense_values.append(tf.cast(x[fea.name], tf.float32) if len(x[fea.name].shape) > 1 else tf.expand_dims(tf.cast(x[fea.name], tf.float32), axis=1))
 
+        if len(dense_values) > 0:
+            dense_exists = True
+            dense_values = tf.concat(dense_values, axis=1)
+        if len(sparse_emb) > 0:
+            sparse_exists = True
+            sparse_emb = tf.concat(sparse_emb, axis=2)
+        
+        if squeeze_dim:
+            if dense_exists and not sparse_exists:
+                return dense_values
+            elif not dense_exists and sparse_exists:
+                return tf.resahpe(sparse_emb, [tf.shape(sparse_emb)[0], -1])
+            elif dense_exists and sparse_exists:
+                return tf.concat([tf.reshape(sparse_emb, [tf.shape(sparse_emb)[0], -1]), dense_values], axis=1)
+            else:
+                raise ValueError("The input features cannot be empty")
+        else:
+            if sparse_exists:
+                return sparse_emb
+            else:
+                raise ValueError("If keeping the original shape: [batch_size, num_features, embed_dim], expected SparseFeatures in feature list, got {}".format(features))
+
+
+            
 
