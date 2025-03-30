@@ -1,7 +1,8 @@
 import tensorflow as tf
+from tensorflow.keras.layers import Layer
 
 
-class RandomNormal:
+class RandomNormal(Layer):
     def __init__(self, mean=0.0, std=1.0):
         self.mean = mean
         self.std = std

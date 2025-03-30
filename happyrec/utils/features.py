@@ -1,6 +1,7 @@
 from happyrec.utils.initializers import RandomNormal
 from happyrec.utils.data import get_auto_embedding_dim
 
+
 class SparseFeature:
     def __init__(self, name, vocab_size, embed_dim=None, pooling="mean", shared_with=None, padding_idx=None, initializer=RandomNormal(0, 0.0001)):
         self.name = name
