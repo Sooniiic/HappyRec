@@ -30,15 +30,18 @@ class MLP(Layer):
 
         
 class PredictionLayer(Layer):
-    def __init__(self, task_type="classification"):
-        super(PredictionLayer, self).__init__()
+    def __init__(self, task_type="classification", task_name="ctr_label"):
+        super(PredictionLayer, self).__init__(name=task_name)
         if task_type not in ["classification", "regression"]:
             raise ValueError("task must be 'classification' or 'regression', {} is illegal".format(task_type))
         self.task_type = task_type
-
-    def forward(self, x):
         if self.task_type == "classification":
-            x = tf.sigmoid(x)
+            self.logit = Dense(1, activation="sigmoid", use_bias=False, name=task_name)
+        else:
+            self.logit = Dense(1, use_bias=False, name=task_name)
+
+    def call(self, x):
+        x = self.logit(x)
         return x
     
 class SumPooling(Layer):

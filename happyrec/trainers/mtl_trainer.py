@@ -42,19 +42,13 @@ class MTLTrainer:
         self.early_stopper = EarlyStopper(patience=earlystop_patience)
         self.model_path = model_path
 
-        self.model.compile(optimizer, loss=['BinaryCrossentropy', 'BinaryCrossentropy'],
-                  metrics=['BinaryCrossentropy'])
+        self.model.compile(optimizer, loss=['binary_crossentropy', 'binary_crossentropy'],
+                  metrics=['binary_crossentropy'])
 
-    def fit(self, x_train, y_train):
-        
-        for epoch in range(self.n_epoch):
-            self.model.fit(x_train,y_train,
-                        batch_size=256, epochs=10, verbose=1, validation_split=0.2)
-            
-            # 验证评估
-            # val_metrics = self.evaluate(x_eval, y_eval)
-            # print(f"Val metrics: {val_metrics}")
-            
+    def fit(self, x_train, y_train): 
+        self.model.fit(x_train, [y_train['cvr_label'], y_train['ctr_label']],
+                    batch_size=256, epochs=50, verbose=10, validation_split=0.2)
+
         
         # 保存模型
         save_path = os.path.join(self.model_path, f"model")
@@ -64,12 +58,11 @@ class MTLTrainer:
     def evaluate(self, x_test, y_test):
         task_metrics = [[] for _ in range(self.n_task)]
         y_pred = self.model.predict(x_test, batch_size=256)
-        print(y_test.shape)
-        print(y_pred.shape)
+        print(y_pred[0])
+        print(y_test)
         for i in range(self.n_task):
             metric = self.evaluate_fns[i](y_test[:, i], y_pred[i])
-            task_metrics[i].append(metric.numpy())
-        
+            task_metrics[i].append(metric)
         return [np.mean(m) for m in task_metrics]
 
     def predict(self, dataset):
