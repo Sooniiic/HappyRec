@@ -1,15 +1,16 @@
 import sys
-sys.path.append("..")
+
+sys.path.append("../..")
 
 import pandas as pd
 import tensorflow as tf
-from happyrec.models.multi_task import SharedBottom
+from happyrec.models.multi_task import SharedBottom, MMOE
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import AUC
 from happyrec.utils.features import DenseFeature, SparseFeature
 from happyrec.trainers import MTLTrainer
 
-def get_census_data_dict(model_name, data_path='./examples/data/census-income'):
+def get_census_data_dict(model_name, data_path='../data/census-income'):
     df_train = pd.read_csv(data_path + '/census_income_train_sample.csv')
     df_val = pd.read_csv(data_path + '/census_income_val_sample.csv')
     df_test = pd.read_csv(data_path + '/census_income_test_sample.csv')
@@ -19,7 +20,7 @@ def get_census_data_dict(model_name, data_path='./examples/data/census-income'):
     data = data.fillna(0)
     #task 1 (as cvr): main task, income prediction
     #task 2(as ctr): auxiliary task, marital status prediction
-    data.rename(columns={'income': 'ctr_label', 'marital status': 'cvr_label'}, inplace=True)
+    data.rename(columns={'income': 'cvr_label', 'marital status': 'ctr_label'}, inplace=True)
     data["ctcvr_label"] = data['cvr_label'] * data['ctr_label']
 
     col_names = data.columns.values.tolist()
@@ -39,7 +40,7 @@ def get_census_data_dict(model_name, data_path='./examples/data/census-income'):
         x_test, y_test = {name: data[name].values[val_idx:] for name in sparse_cols}, {name: data[name].values[val_idx:] for name in label_cols}
         return user_features, item_features, x_train, y_train, x_val, y_val, x_test, y_test
     else:
-        label_cols = ['ctr_label', 'cvr_label']  #the order of labels can be any
+        label_cols = ['cvr_label', 'ctr_label']  #the order of labels can be any
         used_cols = sparse_cols + dense_cols
         features = [SparseFeature(col, data[col].max()+1, embed_dim=4)for col in sparse_cols] \
                    + [DenseFeature(col) for col in dense_cols]
@@ -54,29 +55,38 @@ def main(model_name, epoch, learning_rate, batch_size, weight_decay, device, sav
     #for fair compare in paper, input_dim = 34*4+7=142 #34 sparse(embed_dim=4), 7 dense
     # MMOE 8 expert:143 * 16 * 8 + 16 * 8 * 2 = 18560,
     # then SharedBottom bottom dim: 18560/(143 + 8 * 2)=117
+    # 32 * 4 + 7 = 135
+    # 135 * 16 * 8 + 
     if model_name == "SharedBottom":
         features, x_train, y_train, x_val, y_val, x_test, y_test = get_census_data_dict(model_name)
         task_types = ["classification", "classification"]
-        model = SharedBottom(features=features, task_types=task_types)
-    
+        model = SharedBottom(features=features, bottem_mlp_hidden_units=(117,), tower_mlp_hidden_units=(8,), task_types=task_types)
+    elif model_name == "MMOE":
+        features, x_train, y_train, x_val, y_val, x_test, y_test = get_census_data_dict(model_name)
+        task_types = ["classification", "classification"]
+        model = MMOE(features=features, task_types=task_types, n_expert=8, expert_mlp_hidden_units=(16,), tower_mlp_hidden_units=(8,))
     model = model.build()
     model.summary()
 
-    model.compile(optimizer=Adam(learning_rate=learning_rate), loss=['binary_crossentropy', 'binary_crossentropy'],
+    model.compile(optimizer=Adam(learning_rate=learning_rate, weight_decay=weight_decay), loss=['binary_crossentropy', 'binary_crossentropy'],
                   metrics=[AUC()])
+    # es_callback = tf.keras.callbacks.EarlyStopping(monitor='cvr_label_loss',
+    #                                            patience=10,
+    #                                            start_from_epoch=0)
+
     model.fit(x_train, y_train, validation_data=(x_val, y_val),
-                    batch_size=256, epochs=30, verbose=2)
+                    batch_size=256, epochs=epoch, verbose=2)
     
     test_metric = model.evaluate(x_test, y_test, batch_size=batch_size)
-    print("test incomectr AUC", test_metric[3])
-    print("test maritalcvr AUC", test_metric[4])
+    print("test incomecvr AUC", test_metric[3])
+    print("test maritalctr AUC", test_metric[4])
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', default='SharedBottom')
-    parser.add_argument('--epoch', type=int, default=1)
+    parser.add_argument('--model_name', default='MMOE')
+    parser.add_argument('--epoch', type=int, default=30)
     parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--weight_decay', type=float, default=1e-4)

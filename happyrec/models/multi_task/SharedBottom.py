@@ -6,19 +6,19 @@ Author:
 
 import tensorflow as tf
 from tensorflow.keras import Model
-from tensorflow.keras.layers import Dropout, Flatten, Dense, Input
+from tensorflow.keras.layers import Input
 from happyrec.layers.core import MLP, PredictionLayer, EmbeddingLayer
 
 class SharedBottom(Model):
     def __init__(self, features, bottem_mlp_hidden_units=(256, 128), tower_mlp_hidden_units=(64, 32), 
                 l2_reg_embedding=0.00001, l2_reg_dnn=0, drop_rate=0, activation='relu',
-                dnn_use_bn=True, task_types=['classification', 'regression'], task_names=['ctr_label', 'cvr_label']):
+                dnn_use_bn=True, task_types=['classification', 'classification'], task_names=['ctr_label', 'cvr_label']):
         super(SharedBottom, self).__init__()
-        num_tasks = len(task_names)
-        if num_tasks <= 1:
+        task_num = len(task_names)
+        if task_num <= 1:
             raise ValueError("num_tasks must be greater than 1")
-        if len(task_types) != num_tasks:
-            raise ValueError("num_tasks must be equal to the length og task_types")
+        if len(task_types) != task_num:
+            raise ValueError("num_tasks must be equal to the length of task_types")
 
         self.features = features
         self.task_types = task_types
