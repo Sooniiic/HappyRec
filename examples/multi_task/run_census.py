@@ -4,7 +4,7 @@ sys.path.append("../..")
 
 import pandas as pd
 import tensorflow as tf
-from happyrec.models.multi_task import SharedBottom, MMOE
+from happyrec.models.multi_task import SharedBottom, MMOE, PLE
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import AUC
 from happyrec.utils.features import DenseFeature, SparseFeature
@@ -65,6 +65,11 @@ def main(model_name, epoch, learning_rate, batch_size, weight_decay, device, sav
         features, x_train, y_train, x_val, y_val, x_test, y_test = get_census_data_dict(model_name)
         task_types = ["classification", "classification"]
         model = MMOE(features=features, task_types=task_types, n_expert=8, expert_mlp_hidden_units=(16,), tower_mlp_hidden_units=(8,))
+    elif model_name == "PLE":
+        features, x_train, y_train, x_val, y_val, x_test, y_test = get_census_data_dict(model_name)
+        task_types = ["classification", "classification"]
+        model = PLE(features, n_level=1, n_specific_expert=2, n_shared_expert=1, expert_mlp_hidden_units=(16,), tower_mlp_hidden_units=(8,))
+
     model = model.build()
     model.summary()
 
@@ -85,8 +90,8 @@ def main(model_name, epoch, learning_rate, batch_size, weight_decay, device, sav
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', default='MMOE')
-    parser.add_argument('--epoch', type=int, default=30)
+    parser.add_argument('--model_name', default='PLE')
+    parser.add_argument('--epoch', type=int, default=50)
     parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--weight_decay', type=float, default=1e-4)

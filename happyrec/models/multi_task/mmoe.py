@@ -18,7 +18,7 @@ class MMOE(Model):
         self.n_task = task_num
 
         self.experts = [MLP(expert_mlp_hidden_units) for i in range (self.n_expert)]
-        self.gates = [MLP(hidden_units=(self.n_expert,)) for i in range(self.n_task)]
+        self.gates = [MLP(hidden_units=(self.n_expert,), activation='softmax') for i in range(self.n_task)]
         self.towers = [MLP(tower_mlp_hidden_units) for i in range(self.n_task)]
         self.predict_layers = [PredictionLayer(task_type, task_name=task_name) for task_type, task_name in zip(task_types, task_names)]
 
